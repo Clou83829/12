@@ -1,0 +1,211 @@
+"""
+система управления задачами
+делал сам, потратил где-то час
+
+сначала не очень понимал как делать отмену команд
+потом догадался сохранять старое состояние в каждой команде
+"""
+
+# класс для задачи
+class task:
+    def __init__(self, tid, name):
+        self.id = tid
+        self.name = name
+        self.status = "new"  # может быть: new, in_progress, done
+        self.assigned_to = None
+        self.deadline = None
+    
+    def info(self):
+        """просто возвращает информацию о задаче"""
+        person = self.assigned_to if self.assigned_to else "никто"
+        return f"задача {self.id}: '{self.name}' - {self.status}, отвечает: {person}"
+
+# базовый класс для всех команд
+class command:
+    def execute(self):
+        """выполняем команду"""
+        pass
+    
+    def undo(self):
+        """отменяем команду"""
+        pass
+
+# команда создания новой задачи
+class create_task(command):
+    def __init__(self, manager, task_name):
+        self.manager = manager
+        self.task_name = task_name
+        self.created_task = None
+    
+    def execute(self):
+        """создаём задачу"""
+        # ищем свободный id
+        new_id = 1
+        if self.manager.tasks:
+            new_id = max(self.manager.tasks.keys()) + 1
+        
+        # создаём задачу
+        self.created_task = task(new_id, self.task_name)
+        self.manager.tasks[new_id] = self.created_task
+        
+        print(f"создал задачу: {self.created_task.info()}")
+        return self.created_task
+    
+    def undo(self):
+        """удаляем задачу"""
+        if self.created_task:
+            del self.manager.tasks[self.created_task.id]
+            print(f"удалил задачу (отмена): {self.task_name}")
+
+# команда изменения статуса
+class change_status(command):
+    def __init__(self, manager, task_id, new_status):
+        self.manager = manager
+        self.task_id = task_id
+        self.new_status = new_status
+        self.old_status = None
+    
+    def execute(self):
+        """меняем статус"""
+        t = self.manager.tasks.get(self.task_id)
+        if not t:
+            print(f"задача {self.task_id} не найдена")
+            return False
+        
+        self.old_status = t.status
+        t.status = self.new_status
+        
+        print(f"изменил статус задачи {self.task_id}: {self.old_status} -> {self.new_status}")
+        return True
+    
+    def undo(self):
+        """возвращаем старый статус"""
+        if self.old_status:
+            t = self.manager.tasks.get(self.task_id)
+            if t:
+                t.status = self.old_status
+                print(f"вернул старый статус задаче {self.task_id}: {self.new_status} -> {self.old_status}")
+
+# команда назначения исполнителя
+class assign_user(command):
+    def __init__(self, manager, task_id, user_name):
+        self.manager = manager
+        self.task_id = task_id
+        self.new_user = user_name
+        self.old_user = None
+    
+    def execute(self):
+        """назначаем исполнителя"""
+        t = self.manager.tasks.get(self.task_id)
+        if not t:
+            print(f"задачи {self.task_id} нет")
+            return False
+        
+        self.old_user = t.assigned_to
+        t.assigned_to = self.new_user
+        
+        print(f"назначил задачу {self.task_id} на {self.new_user}")
+        return True
+    
+    def undo(self):
+        """убираем назначение"""
+        if self.old_user is not None:
+            t = self.manager.tasks.get(self.task_id)
+            if t:
+                t.assigned_to = self.old_user
+                old = self.old_user if self.old_user else "никого"
+                print(f"вернул старого исполнителя задаче {self.task_id}: {old}")
+
+# главный менеджер
+class task_manager:
+    def __init__(self):
+        self.tasks = {}
+        self.history = []
+    
+    def run_command(self, cmd):
+        """выполняем команду и запоминаем"""
+        result = cmd.execute()
+        if result:
+            self.history.append(cmd)
+        return result
+    
+    def undo_last(self):
+        """отменяем последнюю команду"""
+        if not self.history:
+            print("нечего отменять")
+            return
+        
+        last_cmd = self.history.pop()
+        last_cmd.undo()
+    
+    def show_all(self):
+        """показываем все задачи"""
+        print("\n--- все задачи ---")
+        if not self.tasks:
+            print("пока нет задач")
+            return
+        
+        for task_id, t in self.tasks.items():
+            print(f"  {t.info()}")
+        print(f"всего задач: {len(self.tasks)}")
+
+# тестируем
+def main():
+    print("пробую систему управления задачами...")
+    print("-" * 40)
+    
+    # создаём менеджер
+    tm = task_manager()
+    
+    # создаём задачи
+    print("создаю задачи:")
+    tm.run_command(create_task(tm, "купить молоко"))
+    tm.run_command(create_task(tm, "сделать уроки"))
+    tm.run_command(create_task(tm, "помыть посуду"))
+    
+    # меняем статусы
+    print("\nменяю статусы:")
+    tm.run_command(change_status(tm, 1, "in_progress"))
+    tm.run_command(change_status(tm, 2, "done"))
+    
+    # назначаем людей
+    print("\nназначаю исполнителей:")
+    tm.run_command(assign_user(tm, 1, "мама"))
+    tm.run_command(assign_user(tm, 3, "папа"))
+    
+    # показываем что есть
+    tm.show_all()
+    
+    # отменяем действия
+    print("\n" + "-" * 40)
+    print("отменяю последние действия:")
+    
+    print("\nотменяю назначение:")
+    tm.undo_last()
+    
+    print("\nотменяю изменение статуса:")
+    tm.undo_last()
+    
+    print("\nотменяю создание задачи:")
+    tm.undo_last()
+    
+    # итоговое состояние
+    print("\n" + "-" * 40)
+    print("что осталось:")
+    tm.show_all()
+    
+    print(f"\nкоманд в истории: {len(tm.history)}")
+    print("вроде работает")
+
+# запускаем
+if __name__ == "__main__":
+    main()
+    
+    # мои заметки
+    print("\n" + "=" * 40)
+    print("что я сделал:")
+    print("1. класс task - хранит данные задачи")
+    print("2. класс command - основа для всех команд")
+    print("3. конкретные команды: создать, изменить статус, назначить")
+    print("4. task_manager - управляет всем и хранит историю")
+    print("5. для отмены каждая команда помнит старое состояние")
